@@ -10,7 +10,7 @@ rho = 2700;     % [kg m^-3] Density
 L_0 = 4;        % [m] Centre point of force application
 W   = 0.05;     % [m] Diameter of force actuator
 
-savefigs = false;
+savefigs = true;
 
 %% Question 4: Numerical Solution
 % Numerically solve the transcendental equation for N>=10 or more frequencies
@@ -54,11 +54,11 @@ for i = 1:4
     hold off;
     grid on;
     xlabel('Position x [m]');
-    ylabel('Displacement w(x)');
-    legend('Location', 'best');
+    ylabel('Displacement w(x) [m]');
+    legend('Location', 'southwest');
 end
 if savefigs
-    uniformFigureStyle(q4_modes, 'Beam_Modes');
+    uniformFigureStyle(q4_modes, 'Q4_Beam_Modes', 20, 3/4);
 end
 
 % Display frequency and natural frequency results
@@ -74,7 +74,7 @@ end
 % period
 
 % Initial deflection function
-w0 = @(x) (0.1 * ((x/L).*(1 - x/L)).^3 .* sin(3*pi*x/L)); % 0.1 m max deflection
+w0 = @(x) (1 * ((x/L).*(1 - x/L)).^3 .* sin(3*pi*x/L));
 
 t_end = 0.2; % [s]
 dt = 0.0002; % [s]
@@ -83,7 +83,8 @@ t = 0:dt:t_end;
 x = linspace(0, L, 500); % [m]
 N_values = [1, 3, 5];
 
-q5_deflection = figure(2);clf;
+w_xt = zeros(length(x), length(t),length(N_values));
+
 for idx = 1:length(N_values)
     N = N_values(idx);
 
@@ -94,34 +95,56 @@ for idx = 1:length(N_values)
         C_n(n) = (1 / (rho * A * L)) * integral(integrand, 0, L);
     end
     % Simulate deflection over time
-    w_xt = zeros(length(x), length(t));
-    w_xt(:, 1) = w0(x)'; % Initial deflection at t=0
+
     for n = 1:N
         % Add the n-th modal contribution to the time-domain response.
         % For zero initial velocity, the modal expansion loses the sine term.
-        w_xt(:,2:end) = w_xt(:,2:end) + C_n(n) * w_hat_(x, n)' * cos(omega_(n) * t(2:end));
+        w_xt(:, :, idx) = w_xt(:, :, idx) + C_n(n) * w_hat_(x, n)' * cos(omega_(n) * t);
     end
-    % Plot results
+end
+
+% Plot results over time
+q5_deflection = figure(2);clf;
+for idx = 1:length(N_values)
+    N = N_values(idx);
+
     subplot(length(N_values), 1, idx);
-    imagesc(t, x, w_xt);
+    imagesc(t, x, w_xt(:, :, idx));
     axis xy;
-    colorbar;
+    cb = colorbar;
+    ylabel(cb, 'Deflection w(x,t) [m]','Rotation',270,'FontSize',10,'interpreter','latex');
     xlabel('Time [s]');
     ylabel('Position x [m]');
     title(sprintf('N=%d', N));
 end
+
+% Compare initial deflection to modal approximation
+q5_initial = figure(3);clf;
+hold on;
+plot(x, w0(x), 'k--', 'DisplayName', 'Initial Deflection w_0(x)', 'LineWidth', 1.5);
+for idx = 1:length(N_values)
+    plot(x, w_xt(:,1,idx), 'DisplayName', sprintf('Modal Approx. N=%d', ...
+        N_values(idx)), 'LineWidth', 1.5);
+end
+hold off;
+grid on;
+xlabel('Position x [m]');
+ylabel('Deflection w(x,0) [m]');
+legend('Location', 'southwest');
+
 if savefigs
-    uniformFigureStyle(q5_deflection, 'Beam_Deflection_Simulation');
+    uniformFigureStyle(q5_deflection, 'Q5_Deflection_Simulation', 18, 3/4);
+    uniformFigureStyle(q5_initial, 'Q5_Initial_Comparison', 15, 1/2);
 end
 
 %% Figure export function
-function result = uniformFigureStyle(figureHandle,fileName)
+function result = uniformFigureStyle(figureHandle,fileName,width,aspectRatio)
 % Author: S. van den Dungen, 2025
 
 % Change the figure size
 figureHandle.Units               = 'centimeters';
-figureHandle.Position(3)         = 20;
-figureHandle.Position(4)         = (3/4)*figureHandle.Position(3);
+figureHandle.Position(3)         = width;
+figureHandle.Position(4)         = aspectRatio * width;
 
 % Get all axes that are in the figure
 allAxesInFigure = findall(figureHandle,'type','axes');
@@ -147,9 +170,17 @@ for k = 1:numel(allAxesInFigure)
     ax.GridColor = [0.15 0.15 0.15];
     ax.MinorGridColor = [0.1 0.1 0.1];
 
-    % Change font
-    %     ax.FontName = 'Myriad Pro';
     ax.FontSize = 10;
+    % Set to latex interpreter
+    ax.TickLabelInterpreter = 'latex';
+    ax.XLabel.Interpreter = 'latex';
+    ax.YLabel.Interpreter = 'latex';
+    if isprop(ax,'ZLabel')
+        ax.ZLabel.Interpreter = 'latex';
+    end
+    if isprop(ax,'Title')
+        ax.Title.Interpreter = 'latex';
+    end
 
     result = result + 1;
 end
@@ -161,7 +192,6 @@ if numel(leg)
     % background
     set(leg, 'EdgeColor', [1 1 1]);
 end
-legend('Location','best')
 
 % Make output folders if necessary
 if ~(exist('outputPNG','dir'))
