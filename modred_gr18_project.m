@@ -10,6 +10,8 @@ rho = 2700;     % [kg m^-3] Density
 L_0 = 4;        % [m] Centre point of force application
 W   = 0.05;     % [m] Diameter of force actuator
 
+savefigs = false;
+
 %% Question 4: Numerical Solution
 % Numerically solve the transcendental equation for N>=10 or more frequencies
 % beta_n, the corresponding natural frequencies omega_n, and the natural
@@ -18,11 +20,11 @@ W   = 0.05;     % [m] Diameter of force actuator
 N = 12;
 syms beta
 
-eqn = cos(beta*L)*cosh(beta*L) - 1 == 0;
+eqn_beta = cos(beta*L)*cosh(beta*L) - 1 == 0;
 
 beta_ = zeros(N, 1);
 for i = 2:N+1
-    beta_(i-1) = double( vpasolve(eqn, beta, i*pi/L) );
+    beta_(i-1) = double( vpasolve(eqn_beta, beta, i*pi/L) );
 end
 
 omega_ = beta_.^2 * sqrt(E*I/(rho*A));
@@ -38,7 +40,7 @@ w_hat_ = @(x,n) double( ...
 x = linspace(0, L, 1000);
 
 q4_modes = figure(1);clf;
-t = tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+t4 = tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 for i = 1:4
     nexttile;
@@ -53,16 +55,63 @@ for i = 1:4
     grid on;
     xlabel('Position x [m]');
     ylabel('Displacement w(x)');
-    title(sprintf('Modes %d-%d', (i-1)*3+1, min(i*3, N)));
     legend('Location', 'best');
 end
-% Save the figure with uniform style
-uniformFigureStyle(q4_modes, 'Beam_Modes');
+if savefigs
+    uniformFigureStyle(q4_modes, 'Beam_Modes');
+end
 
 % Display frequency and natural frequency results
 fprintf('Mode\tBeta_n [1/m]\tOmega_n [rad/s]\n');
 for n = 1:N
     fprintf('%d\t%.4f\t\t%.4f\n', n, beta_(n), omega_(n));
+end
+
+%% Question 5: Initial Deflection Simulation
+% Define an arbitrary, but physically realistic initial deflection of the beam
+% that complies to the double-clamped boundary conditions. Assume zero initial
+% velocity and simulate for various values of N the deflection over a time
+% period
+
+% Initial deflection function
+w0 = @(x) (0.1 * ((x/L).*(1 - x/L)).^3 .* sin(3*pi*x/L)); % 0.1 m max deflection
+
+t_end = 0.2; % [s]
+dt = 0.0002; % [s]
+t = 0:dt:t_end;
+
+x = linspace(0, L, 500); % [m]
+N_values = [1, 3, 5];
+
+q5_deflection = figure(2);clf;
+for idx = 1:length(N_values)
+    N = N_values(idx);
+
+    % Calculate modal coefficients
+    C_n = zeros(N, 1);
+    for n = 1:N
+        integrand = @(x) w0(x) .* w_hat_(x, n);
+        C_n(n) = (1 / (rho * A * L)) * integral(integrand, 0, L);
+    end
+    % Simulate deflection over time
+    w_xt = zeros(length(x), length(t));
+    w_xt(:, 1) = w0(x)'; % Initial deflection at t=0
+    for n = 1:N
+        % Add the n-th modal contribution to the time-domain response.
+        % For zero initial velocity, the modal expansion loses the sine term.
+        w_xt(:,2:end) = w_xt(:,2:end) + C_n(n) * w_hat_(x, n)' * cos(omega_(n) * t(2:end));
+    end
+    % Plot results
+    subplot(length(N_values), 1, idx);
+    imagesc(t, x, w_xt);
+    axis xy;
+    colorbar;
+    xlabel('Time [s]');
+    ylabel('Position x [m]');
+    title(sprintf('N=%d', N));
+end
+if savefigs
+    uniformFigureStyle(q5_deflection, 'Beam_Deflection_Simulation');
 end
 
 %% Figure export function
@@ -85,9 +134,6 @@ result = 0;
 for k = 1:numel(allAxesInFigure)
 
     ax = allAxesInFigure(k);
-
-    % Remove title (should use figure caption)
-    title(ax,'')
 
     % Set the box line width to 1 pt
     ax.LineWidth = 1;
