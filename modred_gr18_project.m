@@ -140,7 +140,7 @@ end
 %% Question 8: Simulation Experiments with State-Space Model
 % Use the state-space model from Question 7 to simulate beam deflections.
 % Experiment with different inputs, approximation orders N, and initial conditions.
-N_max_q8 = 10;
+N_max_q8 = 20;
 
 % Compute additional beta and omega values if needed
 if length(beta_) < N_max_q8
@@ -336,6 +336,94 @@ end
 
 if savefigs
     uniformFigureStyle(q8_initial, 'Q8_Initial_Deflection', 18, 1/4);
+end
+
+%% Question 9: POD Basis Computation
+% Generate snapshot data from a representative experiment with large N,
+% compute POD basis via SVD, and implement POD-based state-space model.
+
+% --- Step 1: Generate snapshot data with large N (reference simulation) ---
+N_ref = N_max_q8;  % Use all available modes for reference
+x_pod = linspace(0, L, 100)';  % Spatial grid (100 points)
+t_pod = linspace(0, 1, 500);   % Time grid (500 snapshots)
+
+% Build state-space matrices for reference model
+Omega_sq_ref = diag(omega_(1:N_ref).^2);
+A_ref = [zeros(N_ref), eye(N_ref); -Omega_sq_ref, zeros(N_ref)];
+B_ref = [zeros(N_ref, 1); b_n(1:N_ref)];
+
+% Combined input: step + sinusoidal at omega_1 to excite multiple modes
+u_combined = @(t) 50 + 30*sin(omega_(1)*t) + 20*sin(omega_(3)*t);
+
+% Initial deflection (same as Q8 Experiment 3)
+a0_ref = zeros(N_ref, 1);
+for n = 1:N_ref
+    integrand = @(x) w0_q8(x) .* phi_q8(x, n);
+    a0_ref(n) = integral(integrand, 0, L);
+end
+x0_ref = [a0_ref; zeros(N_ref, 1)];
+
+% Solve ODE for reference solution
+odefun_ref = @(t, x) A_ref*x + B_ref*u_combined(t);
+[t_ref, x_ref] = ode45(odefun_ref, t_pod, x0_ref);
+a_ref = x_ref(:, 1:N_ref);  % Modal coefficients [M_t x N_ref]
+
+% Build snapshot matrix W: each column is w(x, t_k)
+% W(i,k) = w(x_i, t_k) = sum_n a_n(t_k) * phi_n(x_i)
+M_x = length(x_pod);
+M_t = length(t_ref);
+
+% Pre-compute mode shape matrix Phi_ref(i,n) = phi_n(x_i)
+Phi_ref = zeros(M_x, N_ref);
+for n = 1:N_ref
+    Phi_ref(:, n) = phi_q8(x_pod, n);
+end
+
+% Snapshot matrix: W = Phi_ref * a_ref'
+W = Phi_ref * a_ref';  % [M_x x M_t]
+
+% --- Step 2: Compute POD basis via SVD ---
+% SVD of snapshot matrix: W = U * S * V'
+% POD modes are columns of U
+[U_pod, S_pod, V_pod] = svd(W);
+
+% Singular values (energy content)
+sigma = diag(S_pod);
+energy_content = cumsum(sigma.^2) / sum(sigma.^2);
+
+% Display energy capture for different R values
+fprintf('  Singular value energy capture:\n');
+R_values_display = [1, 2, 3, 5, 10, 15, 20];
+for R = R_values_display
+    if R <= length(sigma)
+        fprintf('    R=%2d: %.4f%% energy\n', R, energy_content(R)*100);
+    end
+end
+
+% --- Plot: Singular value spectrum ---
+q9_spectrum = figure(7); clf;
+subplot(1,2,1);
+h = stem(1:min(20, length(sigma)), sigma(1:min(20, length(sigma))), 'Color', colors_q8(1,:), 'LineWidth', 1.5);
+% set(gca,'yscal','log')
+grid on;
+xlabel('Mode index $r$', 'Interpreter', 'latex');
+ylabel('Singular value $\sigma_r$', 'Interpreter', 'latex');
+title('POD Singular Value Spectrum', 'Interpreter', 'latex');
+
+subplot(1,2,2);
+plot(1:min(20, length(energy_content)), energy_content(1:min(20, length(energy_content)))*100, 'Color', colors_q8(1,:), 'LineWidth', 1.5, 'MarkerFaceColor', 'r');
+hold on;
+yline(99, 'k--', 'LineWidth', 1);
+yline(99.9, 'k:', 'LineWidth', 1);
+hold off;
+grid on;
+xlabel('POD order $R$', 'Interpreter', 'latex');
+ylabel('Cumulative energy [\%]', 'Interpreter', 'latex');
+title('Energy Capture vs POD Order', 'Interpreter', 'latex');
+legend({'Energy', '99\%', '99.9\%'}, 'Location', 'southeast', 'Interpreter', 'latex');
+
+if savefigs
+    uniformFigureStyle(q9_spectrum, 'Q9_POD_Spectrum', 18, 1/4);
 end
 
 %% Figure export function
