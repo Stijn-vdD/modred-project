@@ -392,6 +392,282 @@ if savefigs
     uniformFigureStyle(q9_spectrum, 'Q9_POD_Spectrum', 18, 1/4);
 end
 
+%% Question 10: POD Model Validation
+% Build and validate POD-based reduced-order models
+
+R_max = min(10, size(U_pod, 2));
+
+% Create interpolation functions for POD modes
+phi_pod = cell(R_max, 1);
+for r = 1:R_max
+    phi_pod{r} = @(x_val) interp1(x, U_pod(:, r), x_val, 'spline', 0);
+end
+
+% Construct second derivative matrix using finite differences
+n_pod = length(x);
+D2_pod = zeros(n_pod, n_pod);
+
+% 5-point stencil for interior points
+for i = 3:n_pod-2
+    D2_pod(i, i-2:i+2) = [-1, 16, -30, 16, -1] / (12*dx_pod^2);
+end
+D2_pod(2, 1:4) = [2, -5, 4, -1] / dx_pod^2;
+D2_pod(n_pod-1, n_pod-3:n_pod) = [-1, 4, -5, 2] / dx_pod^2;
+D2_pod(1, 1:4) = [2, -5, 4, -1] / dx_pod^2;
+D2_pod(n_pod, n_pod-3:n_pod) = [-1, 4, -5, 2] / dx_pod^2;
+
+% Compute stiffness matrix
+D2_U = D2_pod * U_pod(:, 1:R_max);
+K_pod = (E*I / (rho*A)) * (D2_U' * D2_U * dx_pod);
+
+% Compute POD modal input coefficients
+b_pod = zeros(R_max, 1);
+for r = 1:R_max
+    integrand = zeros(size(x));
+    for i = 1:length(x)
+        integrand(i) = ell(x(i)) * U_pod(i, r);
+    end
+    b_pod(r) = (1/(rho*A)) * trapz(x, integrand);
+end
+
+% --- Experiment 1: Step Input Response with POD model ---
+% Compare POD model convergence with different orders R
+fprintf('Experiment 1: Step input response\n');
+
+u_step = @(t) 100;
+R_values_pod = [1, 2, 10];
+
+q10_step = figure(8); clf; hold on;
+
+for idx = 1:length(R_values_pod)
+    R_pod = R_values_pod(idx);
+    fprintf('  R = %d POD modes...', R_pod);
+    tic;
+
+    A_pod = [zeros(R_pod), eye(R_pod); -K_pod(1:R_pod, 1:R_pod), zeros(R_pod)];
+    B_pod = [zeros(R_pod, 1); b_pod(1:R_pod)];
+    x0_pod = zeros(2*R_pod, 1);
+
+    odefun_pod = @(t, x) A_pod*x + B_pod*u_step(t);
+    [t_sol_pod, x_sol_pod] = ode45(odefun_pod, t, x0_pod);
+    a_pod_coeff = x_sol_pod(:, 1:R_pod);
+
+    w_mid_pod = zeros(length(t_sol_pod), 1);
+    for i = 1:length(t_sol_pod)
+        for r = 1:R_pod
+            w_mid_pod(i) = w_mid_pod(i) + a_pod_coeff(i, r) * phi_pod{r}(x_mid);
+        end
+    end
+
+    fprintf(' %.2f sec\n', toc);
+
+    if idx == length(R_values_pod)
+        plot(t_sol_pod, w_mid_pod*1e3, '--', 'LineWidth', 2, ...
+            'DisplayName', sprintf('R=%d', R_pod));
+    else
+        plot(t_sol_pod, w_mid_pod*1e3, 'LineWidth', 2, ...
+            'DisplayName', sprintf('R=%d', R_pod));
+    end
+end
+
+hold off;
+grid on;
+xlabel('Time [s]', 'Interpreter', 'latex');
+ylabel('Deflection at $x=L/2$ [mm]', 'Interpreter', 'latex');
+legend('Location', 'southeast', 'Interpreter', 'latex');
+
+if savefigs
+    uniformFigureStyle(q10_step, 'Q10_Step_Response_POD', 18, 1/4);
+end
+
+% --- Experiment 2: Sinusoidal Input at Resonance with POD model ---
+% Test POD model with resonant excitation
+fprintf('Experiment 2: Sinusoidal input at resonance\n');
+tic;
+
+R_pod = 10;
+omega_resonance = omega_(3);
+u_sin = @(t) 50 * sin(omega_resonance * t);
+
+A_pod = [zeros(R_pod), eye(R_pod); -K_pod(1:R_pod, 1:R_pod), zeros(R_pod)];
+B_pod = [zeros(R_pod, 1); b_pod(1:R_pod)];
+x0_pod = zeros(2*R_pod, 1);
+
+odefun_pod = @(t, x) A_pod*x + B_pod*u_sin(t);
+[t_sol_pod, x_sol_pod] = ode45(odefun_pod, t, x0_pod);
+a_pod_coeff = x_sol_pod(:, 1:R_pod);
+
+t_snapshots = t_sim * [0.25, 0.50, 0.75, 1];
+
+q10_resonance = figure(9); clf; hold on;
+
+for idx = 1:length(t_snapshots)
+    [~, t_idx] = min(abs(t_sol_pod - t_snapshots(idx)));
+
+    w_spatial_pod = zeros(size(x));
+    for i = 1:length(x)
+        for r = 1:R_pod
+            w_spatial_pod(i) = w_spatial_pod(i) + a_pod_coeff(t_idx, r) * phi_pod{r}(x(i));
+        end
+    end
+
+    plot(x, w_spatial_pod*1e3, 'LineWidth', 2, ...
+        'DisplayName', sprintf('t=%.2fs', t_snapshots(idx)));
+end
+
+hold off;
+grid on;
+xlabel('Position $x$ [m]', 'Interpreter', 'latex');
+ylabel('Deflection $w(x,t)$ [mm]', 'Interpreter', 'latex');
+legend('Location', 'northeast', 'Interpreter', 'latex');
+
+fprintf('  Completed in %.2f sec\n', toc);
+
+if savefigs
+    uniformFigureStyle(q10_resonance, 'Q10_Resonance_Spatial_POD', 18, 1/4);
+end
+
+% --- Experiment 3: Free Vibration from Initial Deflection with POD model ---
+% Test POD model with zero input, initial deflection only
+fprintf('Experiment 3: Free vibration from initial deflection\n');
+
+w0_q10 = @(x) sin(3*pi*x/L) .* (x/L).^3 .* (1 - x/L).^3;
+R_values_pod_2 = [1, 2, 5, 10];
+
+q10_initial = figure(10); clf; hold on;
+
+for idx = 1:length(R_values_pod_2)
+    R_pod = R_values_pod_2(idx);
+    fprintf('  R = %d POD modes...', R_pod);
+    tic;
+
+    A_pod = [zeros(R_pod), eye(R_pod); -K_pod(1:R_pod, 1:R_pod), zeros(R_pod)];
+    B_pod = [zeros(R_pod, 1); b_pod(1:R_pod)];
+
+    a0_pod = zeros(R_pod, 1);
+    for r = 1:R_pod
+        integrand_pod = zeros(size(x));
+        for i = 1:length(x)
+            integrand_pod(i) = w0_q10(x(i)) * U_pod(i, r);
+        end
+        a0_pod(r) = trapz(x, integrand_pod);
+    end
+
+    x0_pod = [a0_pod; zeros(R_pod, 1)];
+
+    odefun_pod = @(t, x) A_pod*x;
+    [t_sol_pod, x_sol_pod] = ode45(odefun_pod, t, x0_pod);
+    a_pod_coeff = x_sol_pod(:, 1:R_pod);
+
+    % Compute deflection at midpoint
+    w_mid_pod = zeros(length(t_sol_pod), 1);
+    for i = 1:length(t_sol_pod)
+        for r = 1:R_pod
+            w_mid_pod(i) = w_mid_pod(i) + a_pod_coeff(i, r) * phi_pod{r}(x_mid);
+        end
+    end
+
+    fprintf(' %.2f sec\n', toc);
+
+    if idx == length(R_values_pod_2)
+        plot(t_sol_pod, w_mid_pod*1e3, '--', 'LineWidth', 2, ...
+            'DisplayName', sprintf('R=%d', R_pod));
+    else
+        plot(t_sol_pod, w_mid_pod*1e3, 'LineWidth', 2, ...
+            'DisplayName', sprintf('R=%d', R_pod));
+    end
+end
+
+hold off;
+grid on;
+xlabel('Time [s]', 'Interpreter', 'latex');
+ylabel('$w(L/2,t)$ [mm]', 'Interpreter', 'latex');
+legend('Location', 'northeast', 'Interpreter', 'latex');
+
+if savefigs
+    uniformFigureStyle(q10_initial, 'Q10_Initial_Deflection_POD', 18, 1/4);
+end
+
+%% --- Comparison: Natural Modes vs POD ---
+% Compare accuracy of natural mode basis vs POD basis for same initial condition
+fprintf('\nComparison: Natural mode basis vs POD basis\n');
+
+N_compare = 4;
+R_compare = 3;
+R_truth = 10;  % High-order POD model as reference
+
+Omega_sq_cmp = diag(omega_(1:N_compare).^2);
+A_nat = [zeros(N_compare), eye(N_compare); -Omega_sq_cmp, zeros(N_compare)];
+B_nat = [zeros(N_compare, 1); b_n(1:N_compare)];
+
+a0_nat = zeros(N_compare, 1);
+w0_grid_cmp = w0_q10(x);
+for n = 1:N_compare
+    a0_nat(n) = trapz(x, w0_grid_cmp' .* Phi_nat(:, n));
+end
+x0_nat = [a0_nat; zeros(N_compare, 1)];
+
+odefun_nat = @(t, x) A_nat*x;
+[t_nat, x_nat] = ode45(odefun_nat, [0, t_sim], x0_nat);
+
+A_pod_cmp = [zeros(R_compare), eye(R_compare); -K_pod(1:R_compare, 1:R_compare), zeros(R_compare)];
+a0_pod_cmp = zeros(R_compare, 1);
+for r = 1:R_compare
+    integrand_pod = zeros(size(x));
+    for i = 1:length(x)
+        integrand_pod(i) = w0_q10(x(i)) * U_pod(i, r);
+    end
+    a0_pod_cmp(r) = trapz(x, integrand_pod);
+end
+x0_pod_cmp = [a0_pod_cmp; zeros(R_compare, 1)];
+
+odefun_pod_cmp = @(t, x) A_pod_cmp*x;
+[t_pod_cmp, x_pod_cmp] = ode45(odefun_pod_cmp, [0, t_sim], x0_pod_cmp);
+
+A_pod_tru = [zeros(R_truth), eye(R_truth); -K_pod(1:R_truth, 1:R_truth), zeros(R_truth)];
+a0_pod_tru = zeros(R_truth, 1);
+for r = 1:R_truth
+    integrand_pod = zeros(size(x));
+    for i = 1:length(x)
+        integrand_pod(i) = w0_q10(x(i)) * U_pod(i, r);
+    end
+    a0_pod_tru(r) = trapz(x, integrand_pod);
+end
+x0_pod_tru = [a0_pod_tru; zeros(R_truth, 1)];
+
+odefun_pod_tru = @(t, x) A_pod_tru*x;
+[t_pod_tru, x_pod_tru] = ode45(odefun_pod_tru, [0, t_sim], x0_pod_tru);
+
+w_mid_nat = x_nat(:, 1:N_compare) * phi_mid(1:N_compare)';
+
+w_mid_pod_cmp = zeros(length(t_pod_cmp), 1);
+for i = 1:length(t_pod_cmp)
+    for r = 1:R_compare
+        w_mid_pod_cmp(i) = w_mid_pod_cmp(i) + x_pod_cmp(i, r) * phi_pod{r}(x_mid);
+    end
+end
+
+w_mid_pod_tru = zeros(length(t_pod_tru), 1);
+for i = 1:length(t_pod_tru)
+    for r = 1:R_truth
+        w_mid_pod_tru(i) = w_mid_pod_tru(i) + x_pod_tru(i, r) * phi_pod{r}(x_mid);
+    end
+end
+
+q10_comparison = figure(11); clf; hold on;
+plot(t_nat, w_mid_nat*1e3, 'LineWidth', 2, 'DisplayName', sprintf('Natural modes (N=%d)', N_compare));
+plot(t_pod_cmp, w_mid_pod_cmp*1e3, 'LineWidth', 2, 'DisplayName', sprintf('POD (R=%d)', R_compare));
+plot(t_pod_tru, w_mid_pod_tru*1e3, '--', 'LineWidth', 2, 'DisplayName', sprintf('POD (R=%d)', R_truth));
+hold off;
+grid on;
+xlabel('Time [s]', 'Interpreter', 'latex');
+ylabel('$w(L/2,t)$ [mm]', 'Interpreter', 'latex');
+legend('Location', 'northeast', 'Interpreter', 'latex');
+
+if savefigs
+    uniformFigureStyle(q10_comparison, 'Q10_Comparison_Natural_vs_POD', 18, 1/4);
+end
+
 %% Figure export function
 function result = uniformFigureStyle(figureHandle,fileName,width,aspectRatio)
 % Author: S. van den Dungen, 2025
