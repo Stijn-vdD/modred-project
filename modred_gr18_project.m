@@ -360,7 +360,7 @@ sigma = diag(S_pod);
 energy_content = cumsum(sigma.^2) / sum(sigma.^2);
 
 fprintf('  Singular value energy capture:\n');
-R_values_display = [1, 2, 3, 5, 10, 15, 20];
+R_values_display = [1, 2, 3, 5, 10];
 for R = R_values_display
     if R <= length(sigma)
         fprintf('    R=%2d: %.4f%% energy\n', R, energy_content(R)*100);
@@ -370,23 +370,22 @@ end
 % --- Plot: Singular value spectrum ---
 q9_spectrum = figure(7); clf;
 subplot(1,2,1);
-stem(1:min(20, length(sigma)), sigma(1:min(20, length(sigma))), 'LineWidth', 1.5);
+stem(1:min(10, length(sigma)), sigma(1:min(10, length(sigma))), 'LineWidth', 1.5);
 grid on;
 xlabel('Mode index $r$', 'Interpreter', 'latex');
 ylabel('Singular value $\sigma_r$', 'Interpreter', 'latex');
 title('POD Singular Value Spectrum', 'Interpreter', 'latex');
 
 subplot(1,2,2);
-plot(1:min(20, length(energy_content)), energy_content(1:min(20, length(energy_content)))*100, 'LineWidth', 1.5, 'MarkerFaceColor', 'r');
+plot(1:min(10, length(energy_content)), energy_content(1:min(10, length(energy_content)))*100, 'LineWidth', 1.5, 'MarkerFaceColor', 'r');
 hold on;
 yline(99, 'k--', 'LineWidth', 1);
-yline(99.9, 'k:', 'LineWidth', 1);
 hold off;
 grid on;
 xlabel('POD order $R$', 'Interpreter', 'latex');
 ylabel('Cumulative energy [\%]', 'Interpreter', 'latex');
 title('Energy Capture vs POD Order', 'Interpreter', 'latex');
-legend({'Energy', '99\%', '99.9\%'}, 'Location', 'southeast', 'Interpreter', 'latex');
+legend({'Energy', '99\%'}, 'Location', 'southeast', 'Interpreter', 'latex');
 
 if savefigs
     uniformFigureStyle(q9_spectrum, 'Q9_POD_Spectrum', 18, 1/4);
@@ -532,7 +531,7 @@ end
 fprintf('Experiment 3: Free vibration from initial deflection\n');
 
 w0_q10 = @(x) sin(3*pi*x/L) .* (x/L).^3 .* (1 - x/L).^3;
-R_values_pod_2 = [1, 2, 5, 10];
+R_values_pod_2 = [1, 2, 3, 10];
 
 q10_initial = figure(10); clf; hold on;
 
