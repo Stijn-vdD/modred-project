@@ -1,5 +1,14 @@
 clearvars;
 
+% The integration was refactored to use a discretized method instead of symbolic integration 
+% for improved computation time, especially for higher mode numbers. The mode shapes are now 
+% evaluated on a spatial grid, and the integrals for modal coefficients are computed using 
+% numerical quadrature (trapz) instead of symbolic integration. This allows for efficient 
+% computation of a larger number of modes without running into symbolic solver timeouts. 
+% The rest of the code structure and logic remains consistent with the original 
+% implementation, ensuring that the results are comparable while significantly reducing 
+% computation time for higher modes.
+
 % Beam specifications
 % Double clamped
 L   = 5;        % [m] Length of beam
