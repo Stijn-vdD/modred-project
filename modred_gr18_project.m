@@ -61,7 +61,7 @@ for i = 1:4
     legend('Location', 'southwest', 'Interpreter', 'latex');
 end
 if savefigs
-    uniformFigureStyle(q4_modes, 'Q4_Beam_Modes', 20, 3/4);
+    uniformFigureStyle(q4_modes, 'Q4_Beam_Modes', 20, 1/2);
 end
 
 % Display frequency and natural frequency results
@@ -115,7 +115,7 @@ end
 % Compare initial deflection to modal approximation
 q5_initial = figure(3);clf;
 hold on;
-plot(x, w0(x)*1e3, 'k--', 'DisplayName', 'Initial Deflection w_0(x)', 'LineWidth', 1.5);
+plot(x, w0(x)*1e3, 'k--', 'DisplayName', 'Initial Deflection $w_0(x)$', 'LineWidth', 1.5);
 for idx = 1:length(N_values)
     plot(x, w_xt(:,1,idx)*1e3, 'DisplayName', sprintf('Modal Approx. N=%d', ...
         N_values(idx)), 'LineWidth', 1.5);
